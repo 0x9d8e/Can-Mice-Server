@@ -24,13 +24,6 @@ class Game
     public \DateTimeImmutable $remove_at;
     
     /**
-     * Players commands
-     * 
-     * @var \Ds\Queue
-     */
-    public \Ds\Queue $command_queue;
-    
-    /**
      * Messages for players
      * 
      * @var \Ds\Queue
@@ -108,8 +101,6 @@ class Game
     
     public function start(): void 
     {
-        $this->command_queue = new \Ds\Queue();
-        
         $this->status = self::STATUS_GAME;
         foreach ($this->users as $user) {
             $user->play();
@@ -140,9 +131,8 @@ class Game
     
     protected function executeCommands()
     {
-        $command = $this->command_queue->pop();
-        if ($command) {
-            // todo
+        foreach ($this->users as $user) {
+            $user->callCommand();
         }
     }
 

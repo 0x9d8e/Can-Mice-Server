@@ -21,13 +21,16 @@ class User implements MapObject
     public integer $status = self::STATUS_OFFLINE;
     
     public Game $game;
-
+    
+    public \Ds\Queue $command_queue;
 
     public function __construct(string $login, Game $game, Position $position) 
     {
         $this->login = $login;
         $this->game = $game;
         $this->position = $position;
+        
+        $this->command_queue = new \Ds\Queue();
     }
     
     public function wait(): void
@@ -140,6 +143,20 @@ class User implements MapObject
         return false;
     }
     
+    public function addCommand(AbstractCommand $command): void
+    {
+        $this->command_queue->push($command);
+    }
+
+    public function callCommand(): void
+    {
+        $command = $this->command_queue->pop();
+        if ($command) {
+            $command->call();
+        }
+    }
+
+
     protected function moveTo(Position $newPosition): void
     {
         $this->game->map->freePosition($newPosition);
