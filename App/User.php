@@ -2,7 +2,14 @@
 
 namespace App;
 
-class User implements MapObject
+use App\Commands\AbstractCommand;
+use App\Commands\CommandFabric;
+use App\Commands\ExitCommand;
+use Exception;
+use React\Socket\ConnectionInterface;
+use SplQueue;
+
+class User implements MapObjectInterface
 {
     const STATUS_OFFLINE = 0;
     const STATUS_WAITING = 1;
@@ -13,29 +20,99 @@ class User implements MapObject
 
     public string $login;
     
-    public integer $goals = 0;
-    public integer $record = 0;
+    public int $goals = 0;
+    public int $record = 0;
     
     public Position $position;
     
-    public integer $status = self::STATUS_OFFLINE;
+    public int $status = self::STATUS_OFFLINE;
     
     public Game $game;
     
-    public \Ds\Queue $command_queue;
-
-    public function __construct(string $login, Game $game, Position $position) 
+    public SplQueue $command_queue;
+    
+    public ConnectionInterface $connection;
+    
+    protected int $map_object_id;
+    
+    public static function makeByLogin(string $login, Game $game, Position $position): Self
     {
-        $this->login = $login;
-        $this->game = $game;
-        $this->position = $position;
+        $user = new User($game);
+        $user->login = $login;
+        $user->position = $position;
         
-        $this->command_queue = new \Ds\Queue();
+        return $user;
     }
     
+    public static function makeByConnection(ConnectionInterface $connection, Game $game): Self
+    {
+        $user = new User($game);
+        $user->position = Position::makeNull();
+        $user->setConnection($connection);
+        
+        return $user;
+    }
+
+    protected function __construct(Game $game) 
+    {
+        $this->game = $game;
+        $this->command_queue = new SplQueue();
+    }
+    
+    public function setConnection(ConnectionInterface $connection): void
+    {
+        $this->connection = $connection;
+        
+        $connection->on(
+            'data', 
+            function ($data) use ($connection) {
+                $command = (new CommandFabric($this->game, $this))->make($data);
+
+                $this->addCommand($command);
+            }
+        );
+                
+        $this->connection->on(
+            'close', 
+            function () {
+                echo ' Connection closed! ';
+
+                $this->addCommand(
+                    new ExitCommand($this->game, $this->connection, [])
+                );
+            }
+        );
+    }
+    
+    public function auth(string $login): void
+    {
+        if ($this->isAuthorized()) {
+            throw new Exception('User is already authorized!');
+        }
+        $this->login = $login;
+        
+        switch ($this->game->status) {
+            case Game::STATUS_WAITING:
+                $this->wait();
+                break;
+            case Game::STATUS_GAME:
+                $this->play();
+                break;
+            case Game::STATUS_RECORD_TABLE:
+                $this->finish();
+                break;
+        }
+    }
+    
+    public function isAuthorized(): bool
+    {
+        return isset($this->login) && $this->status !== self::STATUS_OFFLINE;
+    }
+
     public function wait(): void
     {
         $this->status = self::STATUS_WAITING;
+        $this->connection->write(" status wait! ");
     }
     
     public function play(): void
@@ -43,6 +120,7 @@ class User implements MapObject
         $this->position = $this->game->map->getFreePosition();
         $this->game->map->add($this);
         $this->status = self::STATUS_MICE;
+        $this->connection->write(" PLAY! status MICE! ");
     }
     
     public function die(): void
@@ -55,6 +133,7 @@ class User implements MapObject
         $this->position = Position::makeNull();
         $this->status = self::STATUS_DEAD;
         
+        $this->connection->write(" YOU ARE DEAD! ");
         $this->game->ressurection_queue->push($this);
     }
     
@@ -64,10 +143,10 @@ class User implements MapObject
         $this->status = self::STATUS_OFFLINE;
     }
 
-
     public function becomeCat() 
     {
         $this->status = self::STATUS_CAT;
+        $this->connection->write(" status CAT! ");
     }
     
     public function goal() 
@@ -80,6 +159,7 @@ class User implements MapObject
         $this->record = max($this->record, $this->goals);
         $this->position = Position::makeNull();
         $this->status = self::STATUS_FINISHED;
+        $this->connection->write(" FINISH! ");
     }
 
     public function getPosition(): Position 
@@ -92,7 +172,7 @@ class User implements MapObject
         $this->position = $position;
     }
 
-    public function touch(MapObject $object, Position $newPosition): void 
+    public function touch(MapObjectInterface $object, Position $newPosition): void 
     {
         if ($object->isWall()) {
             return;
@@ -150,16 +230,44 @@ class User implements MapObject
 
     public function callCommand(): void
     {
+        if ($this->command_queue->isEmpty()) {
+            return;
+        }
+        
         $command = $this->command_queue->pop();
         if ($command) {
             $command->call();
         }
     }
 
-
     protected function moveTo(Position $newPosition): void
     {
         $this->game->map->freePosition($newPosition);
         $this->setPosition($newPosition);
+    }
+
+    public function getTypeId(): string
+    {
+        return 'user';
+    }
+    
+    public function getTypeSpecificData(): array
+    {
+        return [
+            'login' => $this->login,
+            'status' => $this->status,
+            'goals' => $this->goals,
+            'record' => $this->record,
+        ];
+    }
+    
+    public function getMapObjectId(): int
+    {
+        return $this->map_object_id;
+    }
+    
+    public function setMapObjectId(int $id): void
+    {
+        $this->map_object_id = $id;
     }
 }

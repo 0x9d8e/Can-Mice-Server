@@ -3,6 +3,12 @@
         "react/event-loop": "^1.4",
         "react/http": "^1.9",
         "react/socket": "^1.14",
-        "react/datagram": "^1.9"
+        "react/datagram": "^1.9",
+        "symfony/dotenv": "^6.3"
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "App/"
+        }
     }
 }

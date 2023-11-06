@@ -1,6 +1,5 @@
 <?php
 
-
 namespace App;
 
 class Map 
@@ -9,8 +8,9 @@ class Map
     public int $height;
     
     public array $cells = [];
-   
     
+    protected int $last_object_id = 1;
+
     public function __construct(int $width, int $height) 
     {
         $this->width = $width;
@@ -19,7 +19,7 @@ class Map
         $this->fillEmptyCells();
     }
     
-    public function add(MapObject $object): void
+    public function add(MapObjectInterface $object): void
     {
         $position = $object->getPosition();
         if (! $position->isNull()) {
@@ -29,9 +29,11 @@ class Map
             
             $this->cells[$position->x][$position->y] = $object;
         }
+        
+        $object->setMapObjectId(++$this->last_object_id);
     }
     
-    public function get(Position $position): MapObject
+    public function get(Position $position): MapObjectInterface
     {
         return $this->cells[$position->x][$position->y] ?? throw new \Exception("Has not object at {$position}");
     }

@@ -1,20 +1,30 @@
 <?php
 
-namespace App;
+namespace App\Commands;
+
+use App\Game;
+use App\User;
+use Exception;
 
 class MoveCommand extends AbstractCommand
 {
     const DIRECTION_UP          = b1000; // up
-    const DIRECTION_UP_RIGHT    = b1010; // up|right
     const DIRECTION_RIGHT       = b0010; // right
-    const DICRECTION_DONW_RIGHT = b0110; // down|right
     const DIRECTION_DOWN        = b0100; // down
-    const DIRECTION_DOWN_LEFT   = b0101; // down|left
     const DIRECTION_LEFT        = b0001; // left
-    const DIRECTION_UP_LEFT     = b1001; // up|left
 
-    public User $user;
     public int $direction;
+    
+    public function __construct(Game $game, User $user, array $arguments) 
+    {
+        $this->direction = $arguments['direction'] ?? throw new Exception('Bad command! AuthCommand login required.');
+        
+        if (($this->direction > b1111) ) {
+            throw new Exception('Bad command! Unexpected direction ' . $this->direction);
+        }
+        
+        parent::__construct($game, $user, $arguments);
+    }
 
     public function call() 
     {

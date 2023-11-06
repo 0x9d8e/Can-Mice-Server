@@ -2,6 +2,13 @@
 
 namespace App;
 
+use DateInterval;
+use DateTimeImmutable;
+use React\EventLoop\LoopInterface;
+use React\Socket\ConnectionInterface;
+use React\Socket\ServerInterface;
+use SplQueue;
+
 class Game 
 {
     const STATUS_WAITING = 0;
@@ -10,64 +17,107 @@ class Game
     
     public int $status;
 
+    public Config $config;
     public Map $map;
-    
+    public ServerInterface $socket;
+
     /**
      * 
      * @var User[]
      */
     public array $users = [];
     
-    public \DateTimeImmutable $created_at;
-    public \DateTimeImmutable $start_at;
-    public \DateTimeImmutable $finish_at;
-    public \DateTimeImmutable $remove_at;
+    public DateTimeImmutable $created_at;
+    public DateTimeImmutable $start_at;
+    public DateTimeImmutable $finish_at;
+    public DateTimeImmutable $remove_at;
     
     /**
      * Messages for players
-     * 
-     * @var \Ds\Queue
      */
-    public \Ds\Queue $messages_queue;
+    public SplQueue $messages_queue;
     
     /**
      * Dead players waiting here
-     * 
-     * @var \Ds\Queue
      */
-    public \Ds\Queue $ressurection_queue;
-    public \DateTimeImmutable $next_ressurection_at;
+    public SplQueue $ressurection_queue;
+    public DateTimeImmutable $next_ressurection_at;
+    
+    public LoopInterface $loop;
+    public $timer;
 
-    public function __construct() 
+    public function __construct(LoopInterface $loop, Config $config, ServerInterface $socket) 
     {
         $this->status = self::STATUS_WAITING;
-        $this->created_at = new \DateTimeImmutable();
-        $this->start_at = $this->created_at->add(\DateInterval::createFromDateString('2 minutes'));
-        $this->next_ressurection_at = $this->start_at->add(\DateInterval::createFromDateString('5 seconds'));
-        $this->finish_at = $this->start_at->add(\DateInterval::createFromDateString('5 minutes'));
-        $this->remove_at = $this->finish_at->add(\DateInterval::createFromDateString('30 minutes'));
+        
+        $this->loop = $loop;
+        $this->config = $config;
+        $this->socket = $socket;
+        
+        $this->messages_queue = new SplQueue();
+        $this->ressurection_queue = new SplQueue();
+        
+        $this->created_at = new DateTimeImmutable();
+        $this->start_at = $this->created_at->add(
+            DateInterval::createFromDateString($this->config->wait_before_start)
+        );
+        $this->next_ressurection_at = $this->start_at->add(
+            DateInterval::createFromDateString($this->config->ressurection_cooldown)
+        );
+        $this->finish_at = $this->start_at->add(
+            DateInterval::createFromDateString($this->config->game_duration)
+        );
+        $this->remove_at = $this->finish_at->add(
+            DateInterval::createFromDateString($this->config->score_table_duration)
+        );
+
+        $this->makeMap();
     }
     
+    public function run(): void
+    {
+        $this->loop->addPeriodicTimer(
+            $this->config->main_loop_period, 
+            function ($timer) {
+                $this->timer = $timer;
+                $this->loop();
+                echo '.';
+            }
+        );
+
+        $this->socket->on(
+            'connection', 
+            function (ConnectionInterface $connection) {
+                echo " User connected! ";
+                $this->addUser(User::makeByConnection($connection, $this));
+            }
+        );
+    }
+
     public function loop(): bool
     {
         switch ($this->status) {
             case self::STATUS_WAITING:
-                if ($this->start_at->getTimestamp() <= (new \DateTimeImmutable())->getTimestamp()) {
+                if ($this->start_at->getTimestamp() <= (new DateTimeImmutable())->getTimestamp()) {
+                    echo " Game starts! ";
                     $this->start();
                 }
                 
                 break;
             case self::STATUS_GAME:
-                if ($this->finish_at->getTimestamp() <= (new \DateTimeImmutable())->getTimestamp()) {
+                if ($this->finish_at->getTimestamp() <= (new DateTimeImmutable())->getTimestamp()) {
                     $this->finish();
+                    echo " Game finish! ";
                 } else {
                     $this->play();
+                    echo " Play! ";
                 }
 
                 break;
             case self::STATUS_RECORD_TABLE:
-                if ($this->remove_at->getTimestamp() <= (new \DateTimeImmutable())->getTimestamp()) {
+                if ($this->remove_at->getTimestamp() <= (new DateTimeImmutable())->getTimestamp()) {
                     $this->remove();
+                    echo " Game remowed! ";
                     return false;
                 }
                 break;
@@ -78,32 +128,23 @@ class Game
     
     public function makeMap(): void
     {
-        $this->map = new Map(40, 40);
+        $this->map = new Map($this->config->game_width, $this->config->game_height);
     }
     
-    public function addUser(string $login): void
-    {
-        $user = new User($login, $this, $this->map->getFreePosition());
+    public function addUser(User $user): User
+    {     
         $this->users[] = $user;
-      
-        switch ($this->status) {
-            case self::STATUS_WAITING:
-                $user->wait();
-                break;
-            case self::STATUS_GAME:
-                $user->play();
-                break;
-            case self::STATUS_RECORD_TABLE:
-                $user->finish();
-                break;
-        }
+
+        return $user;
     }
     
     public function start(): void 
     {
         $this->status = self::STATUS_GAME;
         foreach ($this->users as $user) {
-            $user->play();
+            if ($user->isAuthorized()) {
+                $user->play();
+            }
         }
     }
     
@@ -126,7 +167,7 @@ class Game
     
     public function remove(): void 
     {
-        // do nothing
+        $this->loop->cancelTimer($this->timer);
     }
     
     protected function executeCommands()
@@ -138,18 +179,26 @@ class Game
 
     protected function ressurection() 
     {
-        if ($this->next_ressurection_at->getTimestamp() <= (new \DateTimeImmutable())->getTimestamp()) {
+        if ($this->next_ressurection_at->getTimestamp() <= (new DateTimeImmutable())->getTimestamp()) {
+            if ($this->ressurection_queue->isEmpty()) {
+                return;
+            }
             $user = $this->ressurection_queue->pop();
             if ($user) {
                 $user->play();
             }
 
-            $this->next_ressurection_at = $this->next_ressurection_at->add(\DateInterval::createFromDateString('5 seconds'));
+            $this->next_ressurection_at = $this->next_ressurection_at->add(
+                DateInterval::createFromDateString($this->config->ressurection_cooldown)
+            );
         }
     }
     
     protected function sendMessages() 
     {
+        if ($this->messages_queue->isEmpty()) {
+            return;
+        }
         $message = $this->messages_queue->pop();
         if ($message) {
             // todo

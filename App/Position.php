@@ -4,8 +4,8 @@ namespace App;
 
 class Position 
 {
-    public int $x;
-    public int $y;
+    public null|int $x;
+    public null|int $y;
     
     public function __construct(null|int $x, null|int $y) {
         $this->x = $x;
@@ -17,12 +17,10 @@ class Position
         return "{{$this->x}, {$this->y}}";
     }
 
-
     public static function makeNull(): Position
     {
         return new Position(null, null);
     }
-
 
     public function isNull(): bool
     {
