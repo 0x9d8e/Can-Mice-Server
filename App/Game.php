@@ -2,6 +2,10 @@
 
 namespace App;
 
+use App\GameEvents\GameEventHandler;
+use App\GameEvents\GameFinish;
+use App\GameEvents\GameStarts;
+use App\GameEvents\NewObjectPositionsOnMap;
 use DateInterval;
 use DateTimeImmutable;
 use React\EventLoop\LoopInterface;
@@ -134,7 +138,7 @@ class Game
     public function addUser(User $user): User
     {     
         $this->users[] = $user;
-
+        
         return $user;
     }
     
@@ -146,6 +150,10 @@ class Game
                 $user->play();
             }
         }
+        
+        (new GameEventHandler($this))->handle(
+            new GameStarts($this->finish_at->getTimestamp())
+        );
     }
     
     public function play(): void
@@ -163,6 +171,10 @@ class Game
         foreach ($this->users as $user) {
             $user->finish();
         }
+        
+        (new GameEventHandler($this))->handle(
+            new GameFinish([]) // todo: make score table
+        );
     }
     
     public function remove(): void 
@@ -196,6 +208,13 @@ class Game
     
     protected function sendMessages() 
     {
+        $handler = new GameEventHandler($this);
+        
+        $objects = $this->map->getObjects();
+        if (!empty($objects)) {
+            $handler->handle(new NewObjectPositionsOnMap($objects));
+        }
+        
         if ($this->messages_queue->isEmpty()) {
             return;
         }

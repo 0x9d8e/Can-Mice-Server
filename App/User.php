@@ -5,6 +5,9 @@ namespace App;
 use App\Commands\AbstractCommand;
 use App\Commands\CommandFabric;
 use App\Commands\ExitCommand;
+use App\GameEvents\GameEventHandler;
+use App\GameEvents\UserAuthorized;
+use App\GameEvents\UserExit;
 use Exception;
 use React\Socket\ConnectionInterface;
 use SplQueue;
@@ -12,11 +15,11 @@ use SplQueue;
 class User implements MapObjectInterface
 {
     const STATUS_OFFLINE = 0;
-    const STATUS_WAITING = 1;
-    const STATUS_MICE = 2;
-    const STATUS_CAT = 3;
-    const STATUS_DEAD = 4;
-    const STATUS_FINISHED = 5;
+    const STATUS_WAITING = 10;
+    const STATUS_MICE = 20;
+    const STATUS_CAT = 30;
+    const STATUS_DEAD = 40;
+    const STATUS_FINISHED = 50;
 
     public string $login;
     
@@ -65,7 +68,7 @@ class User implements MapObjectInterface
         
         $connection->on(
             'data', 
-            function ($data) use ($connection) {
+            function ($data) {
                 $command = (new CommandFabric($this->game, $this))->make($data);
 
                 $this->addCommand($command);
@@ -102,11 +105,22 @@ class User implements MapObjectInterface
                 $this->finish();
                 break;
         }
+        
+        (new GameEventHandler($this->game))->handle(
+            new UserAuthorized($this)
+        );
     }
     
+    public function isOnline(): bool
+    {
+        return isset($this->connection) && $this->connection->isWritable();
+    }
+
     public function isAuthorized(): bool
     {
-        return isset($this->login) && $this->status !== self::STATUS_OFFLINE;
+        return $this->isOnline() 
+                && isset($this->login) 
+                && $this->status !== self::STATUS_OFFLINE;
     }
 
     public function wait(): void
@@ -141,6 +155,10 @@ class User implements MapObjectInterface
     {
         $this->game->map->freePosition($this->position);
         $this->status = self::STATUS_OFFLINE;
+        
+        (new GameEventHandler($this))->handle(
+            new UserExit($this)
+        );
     }
 
     public function becomeCat() 
@@ -159,7 +177,6 @@ class User implements MapObjectInterface
         $this->record = max($this->record, $this->goals);
         $this->position = Position::makeNull();
         $this->status = self::STATUS_FINISHED;
-        $this->connection->write(" FINISH! ");
     }
 
     public function getPosition(): Position 
@@ -269,5 +286,10 @@ class User implements MapObjectInterface
     public function setMapObjectId(int $id): void
     {
         $this->map_object_id = $id;
+    }
+    
+    public function write(Message $message): void
+    {
+        $this->connection->write((string)$message);
     }
 }

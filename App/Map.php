@@ -8,7 +8,9 @@ class Map
     public int $height;
     
     public array $cells = [];
-    
+    protected array $objects = [];
+
+
     protected int $last_object_id = 1;
 
     public function __construct(int $width, int $height) 
@@ -31,11 +33,22 @@ class Map
         }
         
         $object->setMapObjectId(++$this->last_object_id);
+        
+        $this->objects[$object->getMapObjectId()] = $object;
     }
     
     public function get(Position $position): MapObjectInterface
     {
         return $this->cells[$position->x][$position->y] ?? throw new \Exception("Has not object at {$position}");
+    }
+    
+    /**
+     * 
+     * @return MapObjectInterface[]
+     */
+    public function getObjects(): array
+    {
+        return array_values($this->objects);
     }
 
     public function freePosition(Position $position): void
@@ -52,7 +65,8 @@ class Map
         $object->setPosition(Position::makeNull());
        
         $this->cells[$position->x][$position->y] = null;
-       
+        
+        unset($this->objects[$object->getMapObjectId()]);
     }
     
     public function getFreePosition(): Position
@@ -132,5 +146,4 @@ class Map
         
         return true;
     }
-    
 }
