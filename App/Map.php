@@ -2,19 +2,24 @@
 
 namespace App;
 
+use App\GameEvents\GameEventHandler;
+use App\GameEvents\NewObjectOnMap;
+use Exception;
+
 class Map 
 {
+    public Game $game;
     public int $width;
     public int $height;
     
     public array $cells = [];
     protected array $objects = [];
 
-
     protected int $last_object_id = 1;
 
-    public function __construct(int $width, int $height) 
+    public function __construct(Game $game, int $width, int $height) 
     {
+        $this->game = $game;
         $this->width = $width;
         $this->height = $height;
         
@@ -25,8 +30,8 @@ class Map
     {
         $position = $object->getPosition();
         if (! $position->isNull()) {
-            if (!empty($this->cells[$position->x][$position->y])) {
-                throw new \Exception("Can not add object to position {$position}. Position is not empty!");
+            if (!$this->isCellFree($position->x, $position->y)) {
+                throw new Exception("Can not add object to position {$position}. Position is not empty!");
             }
             
             $this->cells[$position->x][$position->y] = $object;
@@ -35,11 +40,13 @@ class Map
         $object->setMapObjectId(++$this->last_object_id);
         
         $this->objects[$object->getMapObjectId()] = $object;
+        
+        (new GameEventHandler($this->game))->handle(new NewObjectOnMap($object));
     }
     
     public function get(Position $position): MapObjectInterface
     {
-        return $this->cells[$position->x][$position->y] ?? throw new \Exception("Has not object at {$position}");
+        return $this->cells[$position->x][$position->y] ?? throw new Exception("Has not object at {$position}");
     }
     
     /**
@@ -79,7 +86,7 @@ class Map
             }
         }
         
-        throw new \Exception('Can not find free position on map!');
+        throw new Exception('Can not find free position on map!');
     }
     
     public function isPositionValid(Position $position): bool 

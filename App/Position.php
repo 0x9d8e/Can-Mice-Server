@@ -16,6 +16,14 @@ class Position
     {
         return "{{$this->x}, {$this->y}}";
     }
+    
+    public function toArray(): array
+    {
+        return [
+            'x' => $this->x,
+            'y' => $this->y,
+        ];
+    }
 
     public static function makeNull(): Position
     {

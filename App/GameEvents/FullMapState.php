@@ -6,16 +6,16 @@ use App\Definitions\GameEventTypeDefinition;
 use App\MapObjectInterface;
 
 /**
- * New positions of objects on the map
+ * Notify all game clients of the full status of objects on the map
  */
-class NewObjectPositionsOnMap implements GameEventInterface
+class FullMapState implements GameEventInterface
 {
     /**
      * 
-     * @var MapObjectInterface[]
+     * @var MapObjectInterface[] $objects
      */
     protected array $objects;
-    
+
     /**
      * 
      * @param MapObjectInterface[] $objects
@@ -27,21 +27,24 @@ class NewObjectPositionsOnMap implements GameEventInterface
 
     public function getId(): string
     {
-        return GameEventTypeDefinition::NEW_OBJECT_POSITION_ON_MAP;
+        return GameEventTypeDefinition::FULL_MAP_STATE;
     }
 
     public function getData(): array
     {
         return array_map(
-            function(MapObjectInterface $object) {
+            function (MapObjectInterface $object) {
                 return [
                     'id' => $object->getMapObjectId(),
+                    'type' => $object->getTypeId(),
                     'position' => $object
                         ->getPosition()
                         ->toArray(),
+                    'type_specific_data' => $object->getTypeSpecificData(),
                 ];
-            }, 
-            $this->objects,
+            },
+            $this->objects
         );
+        
     }
 }

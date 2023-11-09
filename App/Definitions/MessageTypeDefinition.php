@@ -4,12 +4,14 @@ namespace App\Definitions;
 
 class MessageTypeDefinition implements DefinitionInterface
 {
-    const GAME_EVENT = 'game_event';
-    
+    const GLOBAL_GAME_EVENT = 'global_game_event';
+    const PERSONAL_EVENT = 'personal_event';
+
     public static function all(): array
     {
         return [
-            self::GAME_EVENT,
+            self::GLOBAL_GAME_EVENT,
+            self::PERSONAL_EVENT,
         ];
     }
 }

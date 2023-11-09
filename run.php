@@ -1,6 +1,5 @@
 <?php
 
-
 use App\Config;
 use App\Game;
 use React\EventLoop\Loop;
@@ -11,8 +10,6 @@ require __DIR__ . '/vendor/autoload.php';
 
 $dotenv = new Dotenv();
 $dotenv->load(__DIR__ . '/.env');
-
-var_dump($_ENV);
 
 $config = new Config();
 $socket = new SocketServer("{$config->host}:{$config->port}");

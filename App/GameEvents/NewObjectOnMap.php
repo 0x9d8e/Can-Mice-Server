@@ -2,6 +2,7 @@
 
 namespace App\GameEvents;
 
+use App\Definitions\GameEventTypeDefinition;
 use App\MapObjectInterface;
 
 /**
@@ -18,7 +19,7 @@ class NewObjectOnMap implements GameEventInterface
 
     public function getId(): string
     {
-        return 'new_object_on_map';
+        return GameEventTypeDefinition::NEW_OBJECT_ON_MAP;
     }
 
     public function getData(): array
@@ -28,10 +29,9 @@ class NewObjectOnMap implements GameEventInterface
         return [
             'id' => $object->getMapObjectId(),
             'type' => $object->getTypeId(),
-            'position' => [
-                'x' => $object->x,
-                'y' => $object->y,
-            ],
+            'position' => $object
+                ->getPosition()
+                ->toArray(),
             'type_specific_data' => $object->getTypeSpecificData(),
         ];
     }

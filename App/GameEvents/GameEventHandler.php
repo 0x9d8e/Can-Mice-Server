@@ -24,7 +24,7 @@ class GameEventHandler
             
             $user->write(
                 new Message(
-                    MessageTypeDefinition::GAME_EVENT, 
+                    MessageTypeDefinition::GLOBAL_GAME_EVENT, 
                     [
                         'event_type_id' => $event->getId(),
                         'event_data' => $event->getData(),

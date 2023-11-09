@@ -8,6 +8,12 @@ use App\Commands\ExitCommand;
 use App\GameEvents\GameEventHandler;
 use App\GameEvents\UserAuthorized;
 use App\GameEvents\UserExit;
+use App\PersonalEvents\Goal;
+use App\PersonalEvents\PersonalEventHandler;
+use App\PersonalEvents\YouAreCat;
+use App\PersonalEvents\YouAreDead;
+use App\PersonalEvents\YouAreMouse;
+use App\PersonalEvents\YouWillBeRessurected;
 use Exception;
 use React\Socket\ConnectionInterface;
 use SplQueue;
@@ -16,7 +22,7 @@ class User implements MapObjectInterface
 {
     const STATUS_OFFLINE = 0;
     const STATUS_WAITING = 10;
-    const STATUS_MICE = 20;
+    const STATUS_MOUSE = 20;
     const STATUS_CAT = 30;
     const STATUS_DEAD = 40;
     const STATUS_FINISHED = 50;
@@ -133,8 +139,10 @@ class User implements MapObjectInterface
     {
         $this->position = $this->game->map->getFreePosition();
         $this->game->map->add($this);
-        $this->status = self::STATUS_MICE;
-        $this->connection->write(" PLAY! status MICE! ");
+        
+        $this->status = self::STATUS_MOUSE;
+        
+        (new PersonalEventHandler($this))->handle(new YouAreMouse());
     }
     
     public function die(): void
@@ -147,8 +155,20 @@ class User implements MapObjectInterface
         $this->position = Position::makeNull();
         $this->status = self::STATUS_DEAD;
         
-        $this->connection->write(" YOU ARE DEAD! ");
+        // Send: You are dead
+        (new PersonalEventHandler($this))->handle(new YouAreDead());
+        
         $this->game->ressurection_queue->push($this);
+        
+        // Send: You will be ressurected at...
+        (new PersonalEventHandler($this))->handle(
+            new YouWillBeRessurected(
+                $this
+                    ->game
+                    ->next_ressurection_at
+                    ->getTimestamp()
+            )
+        );
     }
     
     public function exit(): void
@@ -164,12 +184,15 @@ class User implements MapObjectInterface
     public function becomeCat() 
     {
         $this->status = self::STATUS_CAT;
-        $this->connection->write(" status CAT! ");
+        
+        (new PersonalEventHandler($this))->handle(new YouAreCat());
     }
     
     public function goal() 
     {
         $this->goals++;
+        
+        (new PersonalEventHandler($this))->handle(new Goal());
     }
 
     public function finish(): void
@@ -201,7 +224,7 @@ class User implements MapObjectInterface
         }
         
         switch ($this->status) {
-            case self::STATUS_MICE:
+            case self::STATUS_MOUSE:
                 if ($object->canBeMouseFood()) {
                     $this->moveTo($newPosition);
                     $this->becomeCat();                  
@@ -222,7 +245,7 @@ class User implements MapObjectInterface
 
     public function canBeCatFood(): bool 
     {
-        return $this->status == self::STATUS_MICE;
+        return $this->status == self::STATUS_MOUSE;
     }
 
     public function canBeMouseFood(): bool 

@@ -2,6 +2,7 @@
 
 namespace App;
 
+use App\GameEvents\FullMapState;
 use App\GameEvents\GameEventHandler;
 use App\GameEvents\GameFinish;
 use App\GameEvents\GameStarts;
@@ -80,6 +81,7 @@ class Game
     
     public function run(): void
     {
+        // Main loop
         $this->loop->addPeriodicTimer(
             $this->config->main_loop_period, 
             function ($timer) {
@@ -88,7 +90,18 @@ class Game
                 echo '.';
             }
         );
+        
+        // Send full map state to each user
+        $this->loop->addPeriodicTimer(
+            $this->config->full_map_update_period, 
+            function () {
+                if ($this->status === Game::STATUS_GAME) {
+                    (new GameEventHandler($this))->handle(new FullMapState($this->map->getObjects()));
+                }
+            }
+        );
 
+        // Handle nes TCP-connection
         $this->socket->on(
             'connection', 
             function (ConnectionInterface $connection) {
@@ -98,6 +111,11 @@ class Game
         );
     }
 
+    /**
+     * Main loop
+     * 
+     * @return bool
+     */
     public function loop(): bool
     {
         switch ($this->status) {
@@ -121,7 +139,7 @@ class Game
             case self::STATUS_RECORD_TABLE:
                 if ($this->remove_at->getTimestamp() <= (new DateTimeImmutable())->getTimestamp()) {
                     $this->remove();
-                    echo " Game remowed! ";
+                    echo " Game removed! ";
                     return false;
                 }
                 break;
@@ -132,7 +150,11 @@ class Game
     
     public function makeMap(): void
     {
-        $this->map = new Map($this->config->game_width, $this->config->game_height);
+        $this->map = new Map(
+            $this, 
+            $this->config->game_width, 
+            $this->config->game_height
+        );
     }
     
     public function addUser(User $user): User

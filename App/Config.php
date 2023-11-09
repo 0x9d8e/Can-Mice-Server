@@ -8,7 +8,9 @@ class Config
     public int $port;
     
     public float $main_loop_period = 1.0;
-    
+    public float $full_map_update_period = 5.0;
+
+
     public int $game_width = 40;
     public int $game_height = 40;
     
